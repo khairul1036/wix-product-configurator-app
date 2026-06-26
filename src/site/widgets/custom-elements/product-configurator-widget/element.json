@@ -1,0 +1,21 @@
+{
+  "$schema": "https://dev.wix.com/wix-cli/schemas/custom-element.json",
+  "id": "78b05615-5e67-4a0b-9df0-06cf4b3b27b9",
+  "name": "Product Configurator Widget",
+  "width": {
+    "defaultWidth": 960,
+    "allowStretch": true
+  },
+  "height": {
+    "defaultHeight": 700
+  },
+  "installation": {
+    "autoAddToSite": true
+  },
+  "presets": [
+    {
+      "id": "570f80bc-de8a-4933-be84-b0eb8a67ef87",
+      "thumbnailUrl": "../../../../dashboard/pages/wix_logo.svg"
+    }
+  ]
+}

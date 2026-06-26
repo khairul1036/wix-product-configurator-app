@@ -1,0 +1,601 @@
+/* Styles for Product Configurator Widget Custom Element */
+
+.root {
+  font-family: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #0f172a;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+/* 1. Main Grid Layout */
+.container {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 48px;
+  background: #ffffff;
+  border-radius: 24px;
+  box-shadow: 0 20px 40px -15px rgba(15, 23, 42, 0.05), 0 0 0 1px rgba(15, 23, 42, 0.04);
+  padding: 40px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 868px) {
+  .container {
+    grid-template-columns: 1fr;
+    gap: 32px;
+    padding: 24px;
+  }
+}
+
+/* 2. Left Column: Media Preview */
+.previewColumn {
+  display: flex;
+  flex-direction: column;
+}
+
+.imageWrapper {
+  position: sticky;
+  top: 24px;
+  border-radius: 20px;
+  overflow: hidden;
+  background: #f8fafc;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  box-shadow: inset 0 2px 8px rgba(15, 23, 42, 0.02);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.imageWrapper:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 30px -10px rgba(15, 23, 42, 0.1);
+}
+
+.productImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  animation: fadeIn 0.4s ease-out;
+}
+
+.noImagePlaceholder {
+  font-size: 14px;
+  color: #64748b;
+  font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 3. Right Column: Details & Customizer */
+.detailsColumn {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.headerSection {
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 24px;
+  margin-bottom: 28px;
+}
+
+.productName {
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.2;
+  margin: 0 0 12px 0;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+}
+
+.priceContainer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.basePrice {
+  font-size: 26px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.discountPrice {
+  font-size: 26px;
+  font-weight: 700;
+  color: #4f46e5; /* Premium Indigo */
+}
+
+.originalPrice {
+  font-size: 18px;
+  text-decoration: line-through;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.badge {
+  background: #fef2f2;
+  color: #ef4444;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border: 1px solid #fee2e2;
+}
+
+.shortDescription {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #475569;
+  margin: 0;
+}
+
+/* 4. Customizer Swatches & Choice Lists */
+.customizerBuilder {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.groupContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.groupTitle {
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin: 0;
+}
+
+.activeSelectionText {
+  color: #0f172a;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 500;
+  margin-left: 6px;
+}
+
+.optionsGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* Color Image Swatches */
+.swatchButton {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 2px solid #e2e8f0;
+  background: #ffffff;
+  cursor: pointer;
+  overflow: hidden;
+  padding: 3px;
+  box-sizing: border-box;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+}
+
+.swatchButton:hover {
+  transform: scale(1.08);
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+.swatchActive {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.15);
+  transform: scale(1.04);
+}
+
+.swatchImage {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.swatchCheck {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  background: #4f46e5;
+  color: #ffffff;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  font-weight: bold;
+}
+
+/* Text Swatches */
+.textButton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+  outline: none;
+}
+
+.textButton:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  transform: translateY(-1px);
+}
+
+.textActive {
+  border-color: #4f46e5;
+  background: #f5f3ff;
+  color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.textButtonName {
+  font-weight: 600;
+}
+
+.textButtonAdjustment {
+  font-size: 12px;
+  background: rgba(15, 23, 42, 0.05);
+  padding: 2px 8px;
+  border-radius: 6px;
+  color: #475569;
+  font-weight: 500;
+}
+
+.textActive .textButtonAdjustment {
+  background: rgba(79, 70, 229, 0.1);
+  color: #4f46e5;
+}
+
+/* 5. Footer CTA Actions */
+.footerSection {
+  margin-top: 40px;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 28px;
+}
+
+.actionButton {
+  width: 100%;
+  padding: 16px 24px;
+  border-radius: 14px;
+  background: #4f46e5; /* Indigo Highlight */
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.25);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+}
+
+.actionButton:hover {
+  background: #4338ca;
+  box-shadow: 0 6px 20px rgba(79, 70, 229, 0.35);
+  transform: translateY(-2px);
+}
+
+.actionButton:active {
+  transform: translateY(0);
+}
+
+/* 6. Confirmation Success View */
+.successCard {
+  background: #ffffff;
+  border-radius: 24px;
+  box-shadow: 0 20px 40px -15px rgba(15, 23, 42, 0.06), 0 0 0 1px rgba(15, 23, 42, 0.04);
+  padding: 48px 32px;
+  text-align: center;
+  max-width: 600px;
+  margin: 40px auto;
+  box-sizing: border-box;
+  animation: scaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.successIcon {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: #f0fdf4;
+  color: #22c55e;
+  font-size: 38px;
+  line-height: 80px;
+  margin: 0 auto 24px auto;
+  border: 2px solid #bbf7d0;
+  font-weight: bold;
+}
+
+.successTitle {
+  font-size: 26px;
+  font-weight: 800;
+  margin: 0 0 12px 0;
+  color: #0f172a;
+}
+
+.successDesc {
+  font-size: 15px;
+  color: #475569;
+  margin: 0 0 32px 0;
+}
+
+.successSummaryBox {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 24px;
+  text-align: left;
+  margin-bottom: 32px;
+}
+
+.summaryTitle {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.summaryList {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.summaryListItem {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  border-bottom: 1px dashed #e2e8f0;
+  padding-bottom: 8px;
+}
+
+.summaryListItem:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.summaryLabel {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.summaryValue {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.summaryAdjustment {
+  font-size: 12px;
+  color: #10b981;
+  font-weight: 500;
+}
+
+.summaryTotalRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid #cbd5e1;
+  padding-top: 16px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.summaryTotalPrice {
+  font-size: 22px;
+  color: #4f46e5;
+}
+
+.resetButton {
+  background: #ffffff;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  padding: 12px 30px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+
+.resetButton:hover {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+/* 7. Skeleton / Empty Placeholder States (Editor View) */
+.placeholderContainer {
+  background: #ffffff;
+  border-radius: 24px;
+  border: 2px dashed #cbd5e1;
+  padding: 40px;
+}
+
+.placeholderGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+  opacity: 0.65;
+}
+
+@media (max-width: 768px) {
+  .placeholderGrid {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}
+
+.placeholderImage {
+  aspect-ratio: 1;
+  background: #f1f5f9;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.placeholderMediaBox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.placeholderMediaIcon {
+  font-size: 64px;
+}
+
+.placeholderInfo {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.placeholderTitle {
+  font-size: 24px;
+  margin: 0 0 12px 0;
+  color: #1e293b;
+}
+
+.placeholderDesc {
+  font-size: 14px;
+  color: #64748b;
+  line-height: 1.6;
+  margin: 0 0 24px 0;
+}
+
+.placeholderSkeletonList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.skeletonItem {
+  height: 24px;
+  background: #e2e8f0;
+  border-radius: 6px;
+  width: 80%;
+}
+
+.skeletonItem:nth-child(2) {
+  width: 60%;
+}
+
+.skeletonItem:nth-child(3) {
+  width: 70%;
+}
+
+.placeholderButton {
+  background: #cbd5e1;
+  color: #ffffff;
+  padding: 14px;
+  border-radius: 12px;
+  text-align: center;
+  font-weight: bold;
+}
+
+/* Spinner and loading states */
+.loadingContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid #f1f5f9;
+  border-top: 4px solid #4f46e5;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+}
+
+.loadingText {
+  color: #64748b;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+/* Error States */
+.errorContainer {
+  background: #fef2f2;
+  border: 1px solid #fee2e2;
+  border-radius: 16px;
+  padding: 32px 24px;
+  text-align: center;
+  max-width: 500px;
+  margin: 40px auto;
+}
+
+.errorIcon {
+  font-size: 40px;
+  margin-bottom: 12px;
+}
+
+.errorTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: #991b1b;
+  margin: 0 0 8px 0;
+}
+
+.errorText {
+  font-size: 14px;
+  color: #b91c1c;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Animations */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes scaleUp {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}

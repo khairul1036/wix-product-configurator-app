@@ -1,0 +1,21 @@
+{
+  "$schema": "https://dev.wix.com/wix-cli/schemas/custom-element.json",
+  "id": "6f3d975a-bbbf-4d3b-9a40-272cb28d4389",
+  "name": "All Products List Widget",
+  "width": {
+    "defaultWidth": 1000,
+    "allowStretch": true
+  },
+  "height": {
+    "defaultHeight": 800
+  },
+  "installation": {
+    "autoAddToSite": true
+  },
+  "presets": [
+    {
+      "id": "1e8c71b0-f4df-4be2-a39c-c9e2b1263d91",
+      "thumbnailUrl": "../../../../dashboard/pages/wix_logo.svg"
+    }
+  ]
+}
