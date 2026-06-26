@@ -1,0 +1,5 @@
+{
+  "$schema": "https://dev.wix.com/wix-cli/schemas/dashboard-page.json",
+  "id": "e4107a0e-4e88-421e-b1f4-8358cb3a3f81",
+  "title": "product-configurator"
+}

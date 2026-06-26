@@ -1,0 +1,5 @@
+{
+  "$schema": "https://dev.wix.com/wix-cli/schemas/wix-config.json",
+  "appId": "f5f86f39-968e-4f8d-a2b2-746710fe6233",
+  "projectId": "product-configurator"
+}
