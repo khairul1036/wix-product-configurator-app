@@ -44,9 +44,29 @@ const ProductConfigurator: FC<Props> = ({ productId, displayName }) => {
   // Order modal or success animation state
   const [orderComplete, setOrderComplete] = useState<boolean>(false);
 
-  // 1. Fetch product data when productId changes
+  // 1. Fetch product data when productId changes or on URL resolution
   useEffect(() => {
-    if (!productId) {
+    let resolvedId = productId;
+
+    if (!resolvedId && typeof window !== 'undefined') {
+      // a. Try to get 'id' or 'productId' from query string
+      const searchParams = new URLSearchParams(window.location.search);
+      resolvedId = searchParams.get('id') || searchParams.get('productId') || '';
+
+      // b. Try to get from last path segment of URL (e.g., /customproducts/{id})
+      if (!resolvedId) {
+        const pathSegments = window.location.pathname.split('/').filter(Boolean);
+        if (pathSegments.length > 0) {
+          const lastSegment = pathSegments[pathSegments.length - 1];
+          // Wix IDs are usually UUIDs or longer alphanumeric strings
+          if (lastSegment && lastSegment.length > 10) {
+            resolvedId = lastSegment;
+          }
+        }
+      }
+    }
+
+    if (!resolvedId) {
       setProduct(null);
       setSelections({});
       setPreviewImageOverride('');
@@ -57,7 +77,7 @@ const ProductConfigurator: FC<Props> = ({ productId, displayName }) => {
     setError(null);
     setOrderComplete(false);
 
-    getProductById(productId)
+    getProductById(resolvedId)
       .then((data) => {
         if (!data || data.status === 'Draft') {
           setError('Selected product configuration is not active or was deleted.');

@@ -14,16 +14,19 @@ import '@wix/design-system/styles.global.css';
 const Panel: FC = () => {
   const [listTitle, setListTitle] = useState<string>('Custom Products');
   const [showSearch, setShowSearch] = useState<boolean>(true);
+  const [detailsUrlPattern, setDetailsUrlPattern] = useState<string>('/customproducts/{id}');
 
   // Load properties from the widget
   useEffect(() => {
     Promise.all([
       widget.getProp('list-title').then((val) => val || 'Custom Products'),
       widget.getProp('show-search').then((val) => val !== 'false'),
+      widget.getProp('details-url-pattern').then((val) => val || '/customproducts/{id}'),
     ])
-      .then(([title, search]) => {
+      .then(([title, search, pattern]) => {
         setListTitle(title);
         setShowSearch(search);
+        setDetailsUrlPattern(pattern);
       })
       .catch((err) => {
         console.error('Failed to load settings in products list panel:', err);
@@ -41,6 +44,12 @@ const Panel: FC = () => {
     setShowSearch(val);
     widget.setProp('show-search', String(val));
   }, [showSearch]);
+
+  const handlePatternChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setDetailsUrlPattern(val);
+    widget.setProp('details-url-pattern', val);
+  }, []);
 
   return (
     <WixDesignSystemProvider>
@@ -61,6 +70,14 @@ const Panel: FC = () => {
                 value={listTitle}
                 onChange={handleTitleChange}
                 placeholder="e.g. Featured Configurators"
+              />
+            </FormField>
+
+            <FormField label="Details Page URL Pattern">
+              <Input
+                value={detailsUrlPattern}
+                onChange={handlePatternChange}
+                placeholder="e.g. /customproducts/{id}"
               />
             </FormField>
 
