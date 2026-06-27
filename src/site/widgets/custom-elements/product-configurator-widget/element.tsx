@@ -48,6 +48,9 @@ const ProductConfigurator: FC<Props> = () => {
   // Selections state: group ID -> selected Option
   const [selections, setSelections] = useState<Record<string, Option>>({});
 
+  // Keeps track of the selection order of group IDs for layered layout compositing
+  const [selectionOrder, setSelectionOrder] = useState<string[]>([]);
+
   // Custom display image override (from selected options)
   const [previewImageOverride, setPreviewImageOverride] = useState<string>('');
 
@@ -132,26 +135,10 @@ const ProductConfigurator: FC<Props> = () => {
             const previewProduct = results[0];
             setProduct(previewProduct);
             
-            // Initialize default selections to the first option of each group
-            const initialSelections: Record<string, Option> = {};
-            let initialPreviewOverride = '';
-
-            if (previewProduct.configurators && previewProduct.configurators.length > 0) {
-              previewProduct.configurators.forEach((group) => {
-                if (group.options && group.options.length > 0) {
-                  const sortedOptions = [...group.options].sort((a, b) => a.order - b.order);
-                  const defaultOption = sortedOptions[0];
-                  initialSelections[group.id] = defaultOption;
-                  
-                  if (defaultOption.displayImage && !initialPreviewOverride) {
-                    initialPreviewOverride = defaultOption.displayImage;
-                  }
-                }
-              });
-            }
-
-            setSelections(initialSelections);
-            setPreviewImageOverride(initialPreviewOverride);
+            // Default to all options unselected initially, showing base image
+            setSelections({});
+            setSelectionOrder([]);
+            setPreviewImageOverride('');
           } else {
             setProduct(null);
           }
@@ -191,28 +178,10 @@ const ProductConfigurator: FC<Props> = () => {
         
         setProduct(data);
         
-        // Initialize default selections to the first option of each group
-        const initialSelections: Record<string, Option> = {};
-        let initialPreviewOverride = '';
-
-        if (data.configurators && data.configurators.length > 0) {
-          // Sort groups & options to pick the first one deterministically
-          data.configurators.forEach((group) => {
-            if (group.options && group.options.length > 0) {
-              const sortedOptions = [...group.options].sort((a, b) => a.order - b.order);
-              const defaultOption = sortedOptions[0];
-              initialSelections[group.id] = defaultOption;
-              
-              // If this default option has a display image, make it the default override
-              if (defaultOption.displayImage && !initialPreviewOverride) {
-                initialPreviewOverride = defaultOption.displayImage;
-              }
-            }
-          });
-        }
-
-        setSelections(initialSelections);
-        setPreviewImageOverride(initialPreviewOverride);
+        // Default to all options unselected initially, showing base image
+        setSelections({});
+        setSelectionOrder([]);
+        setPreviewImageOverride('');
         setLoading(false);
       })
       .catch((err) => {
@@ -223,15 +192,29 @@ const ProductConfigurator: FC<Props> = () => {
       });
   }, []);
 
-  // 2. Handle selection of an option inside a group
+  // 2. Handle selection of an option inside a group (with unselect toggle and layering support)
   const handleSelectOption = (groupId: string, option: Option) => {
-    setSelections((prev) => ({
-      ...prev,
-      [groupId]: option,
-    }));
+    const isAlreadySelected = selections[groupId]?.id === option.id;
 
-    if (option.displayImage) {
-      setPreviewImageOverride(option.displayImage);
+    if (isAlreadySelected) {
+      // Toggle off / Unselect
+      setSelections((prev) => {
+        const next = { ...prev };
+        delete next[groupId];
+        return next;
+      });
+      setSelectionOrder((prev) => prev.filter((id) => id !== groupId));
+    } else {
+      // Select option
+      setSelections((prev) => ({
+        ...prev,
+        [groupId]: option,
+      }));
+      setSelectionOrder((prev) => {
+        // Move to the end of the stack so it renders on top
+        const filtered = prev.filter((id) => id !== groupId);
+        return [...filtered, groupId];
+      });
     }
   };
 
@@ -368,15 +351,32 @@ const ProductConfigurator: FC<Props> = () => {
           {/* Left Column: Image Preview */}
           <div className={styles.previewColumn}>
             <div className={styles.imageWrapper}>
-              {activePreviewImage ? (
+              {/* 1. Base Product Image (always rendered at the bottom) */}
+              {product.image ? (
                 <img
-                  src={getWixMediaUrl(activePreviewImage)}
+                  src={getWixMediaUrl(product.image)}
                   alt={product.productName}
                   className={styles.productImage}
                 />
               ) : (
                 <div className={styles.noImagePlaceholder}>No Image Available</div>
               )}
+
+              {/* 2. Layered Option Images (stacked in order of selection/clicks) */}
+              {selectionOrder.map((groupId) => {
+                const selectedOption = selections[groupId];
+                if (selectedOption && selectedOption.displayImage) {
+                  return (
+                    <img
+                      key={groupId}
+                      src={getWixMediaUrl(selectedOption.displayImage)}
+                      alt={`${product.productName} - ${selectedOption.name}`}
+                      className={styles.overlayImage}
+                    />
+                  );
+                }
+                return null;
+              })}
             </div>
           </div>
 
