@@ -3,81 +3,184 @@ import ReactDOM from 'react-dom';
 import reactToWebComponent from 'react-to-webcomponent';
 import styles from './element.module.css';
 
-import { getProductById } from 'backend/products.web';
+import { getProductById, getProducts } from 'backend/products.web';
 import { Product, Option } from '../../../../backend/types';
 
 // Helper to convert wix:image://v1/ or wix:image:// URL to static HTTPS URL
-function getWixMediaUrl(wixUrl: string): string {
+function getWixMediaUrl(wixUrl: any): string {
   if (!wixUrl) return '';
-  if (wixUrl.startsWith('http://') || wixUrl.startsWith('https://')) {
-    return wixUrl;
+  
+  let url = '';
+  if (typeof wixUrl === 'string') {
+    url = wixUrl;
+  } else if (typeof wixUrl === 'object') {
+    url = wixUrl.src || wixUrl.url || wixUrl.fileUrl || wixUrl.thumbnailUrl || '';
   }
-  if (wixUrl.startsWith('wix:image://')) {
-    let cleanUrl = wixUrl;
-    if (wixUrl.startsWith('wix:image://v1/')) {
-      cleanUrl = wixUrl.substring('wix:image://v1/'.length);
+
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  if (url.startsWith('wix:image://')) {
+    let cleanUrl = url;
+    if (url.startsWith('wix:image://v1/')) {
+      cleanUrl = url.substring('wix:image://v1/'.length);
     } else {
-      cleanUrl = wixUrl.substring('wix:image://'.length);
+      cleanUrl = url.substring('wix:image://'.length);
     }
     const mediaId = cleanUrl.split('/')[0].split('#')[0];
-    return `https://static.wixstatic.com/media/${mediaId}`;
+    if (mediaId && mediaId.length > 5) {
+      return `https://static.wixstatic.com/media/${mediaId}`;
+    }
   }
-  return wixUrl;
+  return url;
 }
 
-interface Props {
-  productId?: string;
-  displayName?: string;
-}
+interface Props {}
 
-const ProductConfigurator: FC<Props> = ({ productId, displayName }) => {
+const ProductConfigurator: FC<Props> = () => {
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  // Track whether we are inside the Wix editor/preview iframe
+  const [isEditorMode, setIsEditorMode] = useState<boolean>(false);
 
   // Selections state: group ID -> selected Option
   const [selections, setSelections] = useState<Record<string, Option>>({});
-  
+
   // Custom display image override (from selected options)
   const [previewImageOverride, setPreviewImageOverride] = useState<string>('');
 
   // Order modal or success animation state
   const [orderComplete, setOrderComplete] = useState<boolean>(false);
 
-  // 1. Fetch product data when productId changes or on URL resolution
+  // 1. Fetch product data from URL query string ?id= on mount
   useEffect(() => {
-    let resolvedId = productId;
+    if (typeof window === 'undefined') return;
 
-    if (!resolvedId && typeof window !== 'undefined') {
-      // a. Try to get 'id' or 'productId' from query string
-      const searchParams = new URLSearchParams(window.location.search);
-      resolvedId = searchParams.get('id') || searchParams.get('productId') || '';
+    // Helper: safely read a string value; returns empty string if cross-origin throws
+    const safeRead = (fn: () => string): string => {
+      try { return fn() || ''; } catch (_e) { return ''; }
+    };
 
-      // b. Try to get from last path segment of URL (e.g., /customproducts/{id})
-      if (!resolvedId) {
-        const pathSegments = window.location.pathname.split('/').filter(Boolean);
-        if (pathSegments.length > 0) {
-          const lastSegment = pathSegments[pathSegments.length - 1];
-          // Wix IDs are usually UUIDs or longer alphanumeric strings
-          if (lastSegment && lastSegment.length > 10) {
-            resolvedId = lastSegment;
+    // Helper: check if a URL looks like an iframe/editor internal URL (not a real page)
+    const isInternalUrl = (href: string, hostname: string, pathname: string): boolean =>
+      pathname.endsWith('.html') ||
+      pathname.includes('CustomElementPreviewIframe') ||
+      pathname.includes('/html/') ||
+      pathname.includes('/_partials/') ||
+      hostname.includes('editor.wix.com') ||
+      hostname.includes('preview.wix.com') ||
+      href.includes('CustomElementPreviewIframe') ||
+      href.includes('static.parastorage.com') ||
+      href.includes('wixstatic.com');
+
+    // Helper: extract the product slug from the last URL path segment
+    const extractSlug = (pathname: string): string => {
+      const segments = pathname.split('/').filter(Boolean);
+      if (segments.length === 0) return '';
+      const last = segments[segments.length - 1];
+      // Reject file extensions, template placeholders, and known page names
+      if (
+        !last ||
+        last.endsWith('.html') ||
+        last.endsWith('.js') ||
+        last.endsWith('.css') ||
+        last === '{id}' ||
+        last === '%7Bid%7D' ||
+        last === 'customproducts' ||
+        last === 'index'
+      ) return '';
+      return decodeURIComponent(last);
+    };
+
+    // --- Determine context ---
+
+    // Read own frame info
+    const selfHref     = safeRead(() => window.location.href);
+    const selfHostname = safeRead(() => window.location.hostname);
+    const selfPathname = safeRead(() => window.location.pathname);
+    const selfIsInternal = isInternalUrl(selfHref, selfHostname, selfPathname);
+
+    // Try to read from top window (main browser tab) — safest source for path slug
+    const topHref     = safeRead(() => window.top!.location.href);
+    const topHostname = safeRead(() => window.top!.location.hostname);
+    const topPathname = safeRead(() => window.top!.location.pathname);
+    const topIsInternal = isInternalUrl(topHref, topHostname, topPathname);
+
+    // Try parent window as secondary
+    const parentPathname = safeRead(() => window.parent.location.pathname);
+
+    // --- Resolve product slug ---
+
+    // Priority: top window path → parent window path → own frame path
+    let slug =
+      (!topIsInternal ? extractSlug(topPathname) : '') ||
+      extractSlug(parentPathname) ||
+      (!selfIsInternal ? extractSlug(selfPathname) : '');
+
+    // --- Handle editor / preview mode ---
+    // If we are in an internal iframe AND no slug was found anywhere,
+    // load the first active product as a preview so the developer can see the design pattern in Editor.
+    if (selfIsInternal && !slug) {
+      setIsEditorMode(true);
+      setLoading(true);
+      setError(null);
+      getProducts(undefined, 'Active')
+        .then((results) => {
+          if (results && results.length > 0) {
+            const previewProduct = results[0];
+            setProduct(previewProduct);
+            
+            // Initialize default selections to the first option of each group
+            const initialSelections: Record<string, Option> = {};
+            let initialPreviewOverride = '';
+
+            if (previewProduct.configurators && previewProduct.configurators.length > 0) {
+              previewProduct.configurators.forEach((group) => {
+                if (group.options && group.options.length > 0) {
+                  const sortedOptions = [...group.options].sort((a, b) => a.order - b.order);
+                  const defaultOption = sortedOptions[0];
+                  initialSelections[group.id] = defaultOption;
+                  
+                  if (defaultOption.displayImage && !initialPreviewOverride) {
+                    initialPreviewOverride = defaultOption.displayImage;
+                  }
+                }
+              });
+            }
+
+            setSelections(initialSelections);
+            setPreviewImageOverride(initialPreviewOverride);
+          } else {
+            setProduct(null);
           }
-        }
-      }
+          setLoading(false);
+        })
+        .catch((err) => {
+          console.error('Failed to load preview product in editor mode:', err);
+          setProduct(null);
+          setLoading(false);
+        });
+      return;
     }
 
-    if (!resolvedId) {
+    if (!slug) {
+      // On a real page but no slug in the URL — show placeholder without error
       setProduct(null);
       setSelections({});
       setPreviewImageOverride('');
+      setError(null);
+      setLoading(false);
       return;
     }
+
 
     setLoading(true);
     setError(null);
     setOrderComplete(false);
 
-    getProductById(resolvedId)
+    getProductById(slug)
       .then((data) => {
         if (!data || data.status === 'Draft') {
           setError('Selected product configuration is not active or was deleted.');
@@ -118,7 +221,7 @@ const ProductConfigurator: FC<Props> = ({ productId, displayName }) => {
         setProduct(null);
         setLoading(false);
       });
-  }, [productId]);
+  }, []);
 
   // 2. Handle selection of an option inside a group
   const handleSelectOption = (groupId: string, option: Option) => {
@@ -177,7 +280,7 @@ const ProductConfigurator: FC<Props> = ({ productId, displayName }) => {
     );
   }
 
-  // 7. Render Placeholder/Empty State (when no product is selected in Editor)
+  // 7. Render Placeholder / Editor Preview State
   if (!product) {
     return (
       <div className={styles.placeholderContainer}>
@@ -189,22 +292,33 @@ const ProductConfigurator: FC<Props> = ({ productId, displayName }) => {
           </div>
           <div className={styles.placeholderInfo}>
             <h2 className={styles.placeholderTitle}>
-              {displayName || 'Product Configurator'}
+              Product Configurator
             </h2>
-            <p className={styles.placeholderDesc}>
-              This is a dynamic product customizer element. Select a custom product in the settings panel to configure options, live pricing, and media overrides.
-            </p>
+            {isEditorMode ? (
+              <p className={styles.placeholderDesc}>
+                <strong>Editor Preview</strong> — This widget is working correctly.
+                On the published site, it will automatically load the product whose
+                "Details" button was clicked, using the <strong>?id=</strong> parameter in the URL.
+                No manual configuration is needed.
+              </p>
+            ) : (
+              <p className={styles.placeholderDesc}>
+                No product found. Navigate to this page from the product list by clicking a
+                product's "Details" button.
+              </p>
+            )}
             <div className={styles.placeholderSkeletonList}>
               <div className={styles.skeletonItem}></div>
               <div className={styles.skeletonItem}></div>
               <div className={styles.skeletonItem}></div>
             </div>
-            <div className={styles.placeholderButton}>Configure Product</div>
+            <div className={styles.placeholderButton}>Dynamic Product Page</div>
           </div>
         </div>
       </div>
     );
   }
+
 
   return (
     <div className={styles.root}>
@@ -372,12 +486,7 @@ const customElement = reactToWebComponent(
   ProductConfigurator,
   React,
   ReactDOM as any,
-  {
-    props: {
-      productId: 'string',
-      displayName: 'string',
-    },
-  }
+  { props: {} }
 );
 
 export default customElement;

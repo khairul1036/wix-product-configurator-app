@@ -147,14 +147,61 @@ export const getProductById = webMethod(
   Permissions.Anyone,
   async (id: string): Promise<Product> => {
     try {
-      await ensureCollectionExists();
-      const item = await elevatedGet(COLLECTION_ID, id);
-      if (!item) {
-        throw new Error(`Product with ID ${id} not found.`);
+      if (!id) {
+        throw new Error('Product ID or Name is required.');
       }
-      return mapToProduct(item);
+      await ensureCollectionExists();
+      
+      // 1. Try to fetch directly by ID first
+      try {
+        const item = await elevatedGet(COLLECTION_ID, id);
+        if (item) {
+          return mapToProduct(item);
+        }
+      } catch (e) {
+        console.log(`Direct fetch failed for ID "${id}", falling back to queries:`, e);
+      }
+
+      // 2. Query by _id
+      let queryResult = await elevatedQuery(COLLECTION_ID).eq('_id', id).find();
+      if (queryResult.items && queryResult.items.length > 0) {
+        return mapToProduct(queryResult.items[0]);
+      }
+
+      // 3. Query by productName (exact match)
+      queryResult = await elevatedQuery(COLLECTION_ID).eq('productName', id).find();
+      if (queryResult.items && queryResult.items.length > 0) {
+        return mapToProduct(queryResult.items[0]);
+      }
+
+      // 4. Fallback: Query all products to check slugified name matches
+      const allResult = await elevatedQuery(COLLECTION_ID).limit(100).find();
+      const itemsList = allResult.items || [];
+      
+      const slugify = (text: string) =>
+        text
+          .toString()
+          .toLowerCase()
+          .trim()
+          .replace(/\s+/g, '-') // Replace spaces with -
+          .replace(/[^\w\-]+/g, '') // Remove all non-word chars
+          .replace(/\-\-+/g, '-') // Replace multiple - with single -
+          .replace(/^-+/, '') // Trim - from start
+          .replace(/-+$/, ''); // Trim - from end
+
+      const targetSlug = slugify(id);
+      const matchedItem = itemsList.find((item: any) => {
+        const nameSlug = slugify(item.productName || '');
+        return nameSlug === targetSlug || (item.productName || '').toLowerCase() === id.toLowerCase();
+      });
+
+      if (matchedItem) {
+        return mapToProduct(matchedItem);
+      }
+
+      throw new Error(`Product with ID or Name "${id}" not found.`);
     } catch (error) {
-      console.error(`Error fetching product by ID ${id}:`, error);
+      console.error(`Error fetching product by ID/Name "${id}":`, error);
       throw error;
     }
   }

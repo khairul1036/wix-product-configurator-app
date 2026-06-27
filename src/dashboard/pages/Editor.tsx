@@ -22,28 +22,33 @@ import { getProductById, createProduct, updateProduct } from 'backend/products.w
 import { Product, Configurator, Option } from 'backend/types';
 
 // Helper: Convert Wix Media URLs (wix:image://v1/...) to renderable HTTP URLs
-function getWixMediaUrl(wixUrl: string): string {
+function getWixMediaUrl(wixUrl: any): string {
   if (!wixUrl) return '';
-
-  // Already a standard HTTP(S) URL
-  if (wixUrl.startsWith('http://') || wixUrl.startsWith('https://')) {
-    return wixUrl;
+  
+  let url = '';
+  if (typeof wixUrl === 'string') {
+    url = wixUrl;
+  } else if (typeof wixUrl === 'object') {
+    url = wixUrl.src || wixUrl.url || wixUrl.fileUrl || wixUrl.thumbnailUrl || '';
   }
 
-  // Internal Wix Media URL format: wix:image://v1/<mediaId>/<filename>#originWidth=...
-  if (wixUrl.startsWith('wix:image://')) {
-    let cleanUrl = wixUrl;
-    if (wixUrl.startsWith('wix:image://v1/')) {
-      cleanUrl = wixUrl.substring('wix:image://v1/'.length);
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  if (url.startsWith('wix:image://')) {
+    let cleanUrl = url;
+    if (url.startsWith('wix:image://v1/')) {
+      cleanUrl = url.substring('wix:image://v1/'.length);
     } else {
-      cleanUrl = wixUrl.substring('wix:image://'.length);
+      cleanUrl = url.substring('wix:image://'.length);
     }
-    // The mediaId is the first path segment (before any /)
     const mediaId = cleanUrl.split('/')[0].split('#')[0];
-    return `https://static.wixstatic.com/media/${mediaId}`;
+    if (mediaId && mediaId.length > 5) {
+      return `https://static.wixstatic.com/media/${mediaId}`;
+    }
   }
-
-  return wixUrl;
+  return url;
 }
 
 const generateId = () => '_' + Math.random().toString(36).substring(2, 11);

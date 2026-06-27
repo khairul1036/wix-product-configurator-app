@@ -7,22 +7,33 @@ import { getProducts } from 'backend/products.web';
 import { Product } from '../../../../backend/types';
 
 // Helper to convert wix:image://v1/ or wix:image:// URL to static HTTPS URL
-function getWixMediaUrl(wixUrl: string): string {
+function getWixMediaUrl(wixUrl: any): string {
   if (!wixUrl) return '';
-  if (wixUrl.startsWith('http://') || wixUrl.startsWith('https://')) {
-    return wixUrl;
+  
+  let url = '';
+  if (typeof wixUrl === 'string') {
+    url = wixUrl;
+  } else if (typeof wixUrl === 'object') {
+    url = wixUrl.src || wixUrl.url || wixUrl.fileUrl || wixUrl.thumbnailUrl || '';
   }
-  if (wixUrl.startsWith('wix:image://')) {
-    let cleanUrl = wixUrl;
-    if (wixUrl.startsWith('wix:image://v1/')) {
-      cleanUrl = wixUrl.substring('wix:image://v1/'.length);
+
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  if (url.startsWith('wix:image://')) {
+    let cleanUrl = url;
+    if (url.startsWith('wix:image://v1/')) {
+      cleanUrl = url.substring('wix:image://v1/'.length);
     } else {
-      cleanUrl = wixUrl.substring('wix:image://'.length);
+      cleanUrl = url.substring('wix:image://'.length);
     }
     const mediaId = cleanUrl.split('/')[0].split('#')[0];
-    return `https://static.wixstatic.com/media/${mediaId}`;
+    if (mediaId && mediaId.length > 5) {
+      return `https://static.wixstatic.com/media/${mediaId}`;
+    }
   }
-  return wixUrl;
+  return url;
 }
 
 interface Props {
@@ -90,21 +101,38 @@ const ProductsList: FC<Props> = ({
       return 0; // default order (creation date)
     });
 
-  // 4. Handle Details click navigation
-  const handleDetailsClick = (productId: string) => {
-    let targetUrl = detailsUrlPattern;
-    if (targetUrl.includes('{id}')) {
-      targetUrl = targetUrl.replace('{id}', productId);
-    } else {
-      if (targetUrl.endsWith('/')) {
-        targetUrl += productId;
-      } else {
-        targetUrl += '/' + productId;
-      }
-    }
+  // Slugify helper — converts product name to URL-friendly path segment
+  const slugify = (text: string): string =>
+    text
+      .toString()
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, '-')         // spaces → hyphens
+      .replace(/[^\w\-]+/g, '')     // remove non-word chars
+      .replace(/--+/g, '-')         // collapse multiple hyphens
+      .replace(/^-+|-+$/g, '');     // trim leading/trailing hyphens
+
+  // 4. Handle Details click navigation — uses clean slug URL: /customproducts/product-name
+  const handleDetailsClick = (productId: string, productName: string) => {
+    let basePath = detailsUrlPattern;
+
+    // Strip any {id} placeholder — we now use the product name slug in the path
+    basePath = basePath.replace('/{id}', '').replace('{id}', '');
+    // Remove trailing slash
+    basePath = basePath.replace(/\/$/, '');
+
+    // Build clean slug URL: /customproducts/product-name
+    const slug = slugify(productName) || encodeURIComponent(productId);
+    const targetUrl = `${basePath}/${slug}`;
 
     if (typeof window !== 'undefined') {
-      window.location.href = targetUrl;
+      // Custom elements run inside iframes — navigate the TOP window (main browser tab),
+      // NOT the iframe itself (which would cause S3 AccessDenied).
+      try {
+        (window.top as Window).location.href = targetUrl;
+      } catch (_e) {
+        window.location.href = targetUrl;
+      }
     }
   };
 
@@ -190,7 +218,7 @@ const ProductsList: FC<Props> = ({
                     </div>
                     <button
                       className={styles.detailsButton}
-                      onClick={() => handleDetailsClick(p.id)}
+                      onClick={() => handleDetailsClick(p.id, p.productName)}
                     >
                       Details
                     </button>

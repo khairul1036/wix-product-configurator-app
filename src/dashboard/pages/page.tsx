@@ -23,22 +23,33 @@ import { Product } from '../../backend/types';
 import Editor from './Editor';
 
 // Helper: render any image URL – handles both HTTP and wix:image:// formats
-function getWixMediaUrl(wixUrl: string): string {
+function getWixMediaUrl(wixUrl: any): string {
   if (!wixUrl) return '';
-  if (wixUrl.startsWith('http://') || wixUrl.startsWith('https://')) {
-    return wixUrl;
+  
+  let url = '';
+  if (typeof wixUrl === 'string') {
+    url = wixUrl;
+  } else if (typeof wixUrl === 'object') {
+    url = wixUrl.src || wixUrl.url || wixUrl.fileUrl || wixUrl.thumbnailUrl || '';
   }
-  if (wixUrl.startsWith('wix:image://')) {
-    let cleanUrl = wixUrl;
-    if (wixUrl.startsWith('wix:image://v1/')) {
-      cleanUrl = wixUrl.substring('wix:image://v1/'.length);
+
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  if (url.startsWith('wix:image://')) {
+    let cleanUrl = url;
+    if (url.startsWith('wix:image://v1/')) {
+      cleanUrl = url.substring('wix:image://v1/'.length);
     } else {
-      cleanUrl = wixUrl.substring('wix:image://'.length);
+      cleanUrl = url.substring('wix:image://'.length);
     }
     const mediaId = cleanUrl.split('/')[0].split('#')[0];
-    return `https://static.wixstatic.com/media/${mediaId}`;
+    if (mediaId && mediaId.length > 5) {
+      return `https://static.wixstatic.com/media/${mediaId}`;
+    }
   }
-  return wixUrl;
+  return url;
 }
 
 const Index: FC = () => {
