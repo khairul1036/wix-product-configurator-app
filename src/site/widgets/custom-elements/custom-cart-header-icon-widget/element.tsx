@@ -29,6 +29,19 @@ const CustomCartHeaderIcon: FC = () => {
   useEffect(() => {
     updateCartCount();
 
+    // Clear cart if we just landed on the thank-you page after successful payment
+    if (typeof window !== 'undefined') {
+      try {
+        const topLoc = (window.top || window).location;
+        const searchParams = new URLSearchParams(topLoc.search);
+        const orderId = searchParams.get('orderId') || searchParams.get('checkoutId');
+        if (topLoc.pathname.includes('/thank-you') || topLoc.pathname.includes('/order-received') || orderId) {
+          localStorage.removeItem('custom_configurator_cart');
+          updateCartCount();
+        }
+      } catch (_e) { /* cross-origin safe */ }
+    }
+
     // Listen to custom window events for immediate reactive updates
     if (typeof window !== 'undefined') {
       window.addEventListener('custom-cart-updated', updateCartCount);

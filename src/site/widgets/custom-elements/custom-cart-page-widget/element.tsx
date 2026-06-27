@@ -16,6 +16,23 @@ interface CartItem {
   quantity: number;
   selectionsText: string;
   selections: Record<string, Option>;
+  customPreviewUrl?: string;
+}
+
+// Helper to convert wix:image:// URL to static HTTPS URL
+function getWixMediaUrl(wixUrl: any): string {
+  if (!wixUrl) return '';
+  let url = typeof wixUrl === 'string' ? wixUrl : (wixUrl.src || wixUrl.url || wixUrl.fileUrl || '');
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url.startsWith('wix:image://')) {
+    let cleanUrl = url.startsWith('wix:image://v1/')
+      ? url.substring('wix:image://v1/'.length)
+      : url.substring('wix:image://'.length);
+    const mediaId = cleanUrl.split('/')[0].split('#')[0];
+    if (mediaId && mediaId.length > 5) return `https://static.wixstatic.com/media/${mediaId}`;
+  }
+  return url;
 }
 
 const CustomCartPage: FC = () => {
@@ -42,15 +59,20 @@ const CustomCartPage: FC = () => {
         const topLoc = (window.top || window).location;
         const searchParams = new URLSearchParams(topLoc.search);
         const orderId = searchParams.get('orderId') || searchParams.get('checkoutId');
-        
+
         if (topLoc.pathname.includes('/thank-you') || topLoc.pathname.includes('/order-received') || orderId) {
           setStep('success');
+          // Clear cart ONLY after successful payment completion
+          localStorage.removeItem('custom_configurator_cart');
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('custom-cart-updated'));
+          }
           // If we have an order ID from Wix checkout, display it in success screen
           if (orderId) {
             setSuccessOrderDetails({
               orderNumber: orderId.substring(0, 10).toUpperCase(),
               customerName: searchParams.get('name') || 'Valued Customer',
-              totalAmount: 0 // Wix checkout handles final total display, we show order number
+              totalAmount: 0
             });
           }
         }
@@ -126,10 +148,7 @@ const CustomCartPage: FC = () => {
       const result = await createWixCheckout(cartItems);
 
       if (result && result.redirectUrl) {
-        // Clear local cart before redirecting so they return to an empty cart
-        localStorage.removeItem('custom_configurator_cart');
-        notifyCartUpdated();
-
+        // DO NOT clear cart here — cart is only cleared after payment on /thank-you page
         // Redirect top window to Wix native checkout url
         if (typeof window !== 'undefined') {
           (window.top as Window).location.href = result.redirectUrl;
@@ -139,7 +158,15 @@ const CustomCartPage: FC = () => {
       }
     } catch (err: any) {
       console.error('Wix checkout creation error:', err);
-      setCheckoutError(err.message || 'An error occurred while creating your checkout session.');
+      let userFriendlyError = err.message || 'An error occurred while creating your checkout session.';
+      if (
+        userFriendlyError.includes('CHECKOUT_PAGE_URL_NOT_FOUND') ||
+        userFriendlyError.includes('checkout page URL') ||
+        userFriendlyError.includes('UNKNOWN')
+      ) {
+        userFriendlyError = 'Wix Native Checkout requires the "Wix Stores" (Wix E-commerce) app to be installed and active on your site. Please install "Wix Stores" from the Wix App Market in your dashboard so that Wix provisions the secure checkout page, then try again.';
+      }
+      setCheckoutError(userFriendlyError);
     } finally {
       setCheckoutLoading(false);
     }
@@ -177,22 +204,27 @@ const CustomCartPage: FC = () => {
                 {cartItems.map((item) => (
                   <div key={item.id} className={styles.cartItemRow}>
                     <div className={styles.cartItemImgWrapper}>
-                      {/* Base Image */}
-                      {item.baseImage ? (
-                        <img src={item.baseImage} alt={item.productName} className={styles.cartItemBaseImg} />
+                      {/* Show merged configured image if available, otherwise fallback to layer stacking */}
+                      {item.customPreviewUrl ? (
+                        <img src={getWixMediaUrl(item.customPreviewUrl)} alt={item.productName} className={styles.cartItemBaseImg} />
                       ) : (
-                        <div className={styles.noImageThumb}>🛍️</div>
+                        <>
+                          {item.baseImage ? (
+                            <img src={item.baseImage} alt={item.productName} className={styles.cartItemBaseImg} />
+                          ) : (
+                            <div className={styles.noImageThumb}>🛍️</div>
+                          )}
+                          {item.overlayImages && item.overlayImages.map((overlayUrl, idx) => (
+                            <img
+                              key={idx}
+                              src={overlayUrl}
+                              alt=""
+                              className={styles.cartItemOverlayImg}
+                              style={{ zIndex: idx + 1 }}
+                            />
+                          ))}
+                        </>
                       )}
-                      {/* Stacked Configurator Overlays */}
-                      {item.overlayImages && item.overlayImages.map((overlayUrl, idx) => (
-                        <img
-                          key={idx}
-                          src={overlayUrl}
-                          alt=""
-                          className={styles.cartItemOverlayImg}
-                          style={{ zIndex: idx + 1 }}
-                        />
-                      ))}
                     </div>
                     <div className={styles.cartItemDetails}>
                       <div className={styles.cartItemHeader}>
@@ -258,7 +290,7 @@ const CustomCartPage: FC = () => {
             <p className={styles.successDesc}>
               Thank you! Your customized order has been received and is being processed.
             </p>
-            
+
             <div className={styles.successSummaryBox}>
               <h4 className={styles.summaryTitle}>Your Order Info:</h4>
               <div className={styles.summaryDetailsList}>

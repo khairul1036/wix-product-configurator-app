@@ -4,6 +4,7 @@ import reactToWebComponent from 'react-to-webcomponent';
 import styles from './element.module.css';
 
 import { getProductById, getProducts } from 'backend/products.web';
+import { uploadConfiguredImage } from 'backend/cart.web';
 import { Product, Option } from '../../../../backend/types';
 
 interface CartItem {
@@ -16,12 +17,42 @@ interface CartItem {
   quantity: number;
   selectionsText: string;
   selections: Record<string, Option>;
+  customPreviewUrl?: string;
+}
+
+// Merge base image + overlay layers on a canvas and return base64 JPEG
+function mergeConfiguredImages(baseImageUrl: string, overlayUrls: string[]): Promise<string> {
+  return new Promise((resolve) => {
+    const urls = [baseImageUrl, ...overlayUrls].filter(Boolean);
+    if (urls.length === 0) { resolve(''); return; }
+
+    const loadImage = (url: string): Promise<HTMLImageElement> =>
+      new Promise((res, rej) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => res(img);
+        img.onerror = () => rej(new Error(`Failed to load: ${url}`));
+        img.src = url;
+      });
+
+    Promise.all(urls.map(loadImage))
+      .then((images) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = images[0].naturalWidth || 800;
+        canvas.height = images[0].naturalHeight || 800;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { resolve(''); return; }
+        images.forEach((img) => ctx.drawImage(img, 0, 0, canvas.width, canvas.height));
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      })
+      .catch((err) => { console.error('Image merge failed:', err); resolve(''); });
+  });
 }
 
 // Helper to convert wix:image://v1/ or wix:image:// URL to static HTTPS URL
 function getWixMediaUrl(wixUrl: any): string {
   if (!wixUrl) return '';
-  
+
   let url = '';
   if (typeof wixUrl === 'string') {
     url = wixUrl;
@@ -48,7 +79,7 @@ function getWixMediaUrl(wixUrl: any): string {
   return url;
 }
 
-interface Props {}
+interface Props { }
 
 const ProductConfigurator: FC<Props> = () => {
   const [product, setProduct] = useState<Product | null>(null);
@@ -110,13 +141,13 @@ const ProductConfigurator: FC<Props> = () => {
     // --- Determine context ---
 
     // Read own frame info
-    const selfHref     = safeRead(() => window.location.href);
+    const selfHref = safeRead(() => window.location.href);
     const selfHostname = safeRead(() => window.location.hostname);
     const selfPathname = safeRead(() => window.location.pathname);
     const selfIsInternal = isInternalUrl(selfHref, selfHostname, selfPathname);
 
     // Try to read from top window (main browser tab) — safest source for path slug
-    const topHref     = safeRead(() => window.top!.location.href);
+    const topHref = safeRead(() => window.top!.location.href);
     const topHostname = safeRead(() => window.top!.location.hostname);
     const topPathname = safeRead(() => window.top!.location.pathname);
     const topIsInternal = isInternalUrl(topHref, topHostname, topPathname);
@@ -144,7 +175,7 @@ const ProductConfigurator: FC<Props> = () => {
           if (results && results.length > 0) {
             const previewProduct = results[0];
             setProduct(previewProduct);
-            
+
             // Default to all options unselected initially, showing base image
             setSelections({});
             setPreviewImageOverride('');
@@ -183,9 +214,9 @@ const ProductConfigurator: FC<Props> = () => {
           setLoading(false);
           return;
         }
-        
+
         setProduct(data);
-        
+
         // Default to all options unselected initially, showing base image
         setSelections({});
         setPreviewImageOverride('');
@@ -227,7 +258,7 @@ const ProductConfigurator: FC<Props> = () => {
   };
 
   // Add customized configuration to custom local cart in localStorage
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (!product) return;
 
     setIsAdding(true);
@@ -257,21 +288,34 @@ const ProductConfigurator: FC<Props> = () => {
       }
     });
 
+    // 3.5 Merge all layers on canvas and upload to Wix Media Manager
+    let customPreviewUrl = '';
+    try {
+      const base64Data = await mergeConfiguredImages(baseImage, overlayImages);
+      if (base64Data && base64Data.startsWith('data:image')) {
+        const uploadResult = await uploadConfiguredImage(base64Data, `config-${product.id}-${Date.now()}.jpg`);
+        if (uploadResult && uploadResult.fileUrl) {
+          customPreviewUrl = uploadResult.fileUrl;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to upload merged configuration image:', e);
+    }
+
     // 4. Create or update cart list in localStorage
     try {
       const stored = localStorage.getItem('custom_configurator_cart');
       let currentCartList: CartItem[] = stored ? JSON.parse(stored) : [];
-      
+
       const existingIndex = currentCartList.findIndex((item) => item.id === cartItemId);
 
       if (existingIndex > -1) {
-        // Increment quantity of existing customized configuration
         currentCartList[existingIndex] = {
           ...currentCartList[existingIndex],
           quantity: currentCartList[existingIndex].quantity + 1,
+          customPreviewUrl: customPreviewUrl || currentCartList[existingIndex].customPreviewUrl,
         };
       } else {
-        // Add new customized configuration
         const newCartItem: CartItem = {
           id: cartItemId,
           productId: product.id,
@@ -282,6 +326,7 @@ const ProductConfigurator: FC<Props> = () => {
           quantity: 1,
           selectionsText,
           selections: { ...selections },
+          customPreviewUrl: customPreviewUrl || undefined,
         };
         currentCartList.push(newCartItem);
       }
@@ -295,14 +340,9 @@ const ProductConfigurator: FC<Props> = () => {
     notifyCartUpdated();
 
     // 6. Visual status feedback in button
-    setTimeout(() => {
-      setIsAdding(false);
-      setIsAdded(true);
-      
-      setTimeout(() => {
-        setIsAdded(false);
-      }, 1500);
-    }, 600);
+    setIsAdding(false);
+    setIsAdded(true);
+    setTimeout(() => { setIsAdded(false); }, 1500);
   };
 
   // 3. Format pricing
@@ -393,137 +433,134 @@ const ProductConfigurator: FC<Props> = () => {
   return (
     <div className={styles.root}>
       <div className={styles.container}>
-          {/* Left Column: Image Preview */}
-          <div className={styles.previewColumn}>
-            <div className={styles.imageWrapper}>
-              {/* 1. Base Product Image (always rendered at the bottom) */}
-              {product.image ? (
-                <img
-                  src={getWixMediaUrl(product.image)}
-                  alt={product.productName}
-                  className={styles.productImage}
-                />
-              ) : (
-                <div className={styles.noImagePlaceholder}>No Image Available</div>
-              )}
+        {/* Left Column: Image Preview */}
+        <div className={styles.previewColumn}>
+          <div className={styles.imageWrapper}>
+            {/* 1. Base Product Image (always rendered at the bottom) */}
+            {product.image ? (
+              <img
+                src={getWixMediaUrl(product.image)}
+                alt={product.productName}
+                className={styles.productImage}
+              />
+            ) : (
+              <div className={styles.noImagePlaceholder}>No Image Available</div>
+            )}
 
-              {/* 2. Layered Option Images (stacked in order of product.configurators groups) */}
-              {product.configurators.map((group, index) => {
-                const selectedOption = selections[group.id];
-                if (selectedOption && selectedOption.displayImage) {
-                  return (
-                    <img
-                      key={group.id}
-                      src={getWixMediaUrl(selectedOption.displayImage)}
-                      alt={`${product.productName} - ${selectedOption.name}`}
-                      className={styles.overlayImage}
-                      style={{ zIndex: index + 1 }}
-                    />
-                  );
-                }
-                return null;
-              })}
+            {/* 2. Layered Option Images (stacked in order of product.configurators groups) */}
+            {product.configurators.map((group, index) => {
+              const selectedOption = selections[group.id];
+              if (selectedOption && selectedOption.displayImage) {
+                return (
+                  <img
+                    key={group.id}
+                    src={getWixMediaUrl(selectedOption.displayImage)}
+                    alt={`${product.productName} - ${selectedOption.name}`}
+                    className={styles.overlayImage}
+                    style={{ zIndex: index + 1 }}
+                  />
+                );
+              }
+              return null;
+            })}
+          </div>
+        </div>
+
+        {/* Right Column: Customizer Details */}
+        <div className={styles.detailsColumn}>
+          <div className={styles.headerSection}>
+            <h1 className={styles.productName}>{product.productName}</h1>
+            <div className={styles.priceContainer}>
+              {discountPrice !== undefined ? (
+                <>
+                  <span className={styles.discountPrice}>{formatPrice(currentPrice)}</span>
+                  <span className={styles.originalPrice}>
+                    {formatPrice(basePrice + totalAdjustment)}
+                  </span>
+                  <span className={styles.badge}>SALE</span>
+                </>
+              ) : (
+                <span className={styles.basePrice}>{formatPrice(currentPrice)}</span>
+              )}
             </div>
+            {product.shortDescription && (
+              <p className={styles.shortDescription}>{product.shortDescription}</p>
+            )}
           </div>
 
-          {/* Right Column: Customizer Details */}
-          <div className={styles.detailsColumn}>
-            <div className={styles.headerSection}>
-              <h1 className={styles.productName}>{product.productName}</h1>
-              <div className={styles.priceContainer}>
-                {discountPrice !== undefined ? (
-                  <>
-                    <span className={styles.discountPrice}>{formatPrice(currentPrice)}</span>
-                    <span className={styles.originalPrice}>
-                      {formatPrice(basePrice + totalAdjustment)}
+          <div className={styles.customizerBuilder}>
+            {product.configurators.map((group) => {
+              const selectedOption = selections[group.id];
+
+              return (
+                <div key={group.id} className={styles.groupContainer}>
+                  <h3 className={styles.groupTitle}>
+                    {group.title}:{' '}
+                    <span className={styles.activeSelectionText}>
+                      {selectedOption ? selectedOption.name : ''}
                     </span>
-                    <span className={styles.badge}>SALE</span>
-                  </>
-                ) : (
-                  <span className={styles.basePrice}>{formatPrice(currentPrice)}</span>
-                )}
-              </div>
-              {product.shortDescription && (
-                <p className={styles.shortDescription}>{product.shortDescription}</p>
-              )}
-            </div>
+                  </h3>
+                  <div className={styles.optionsGrid}>
+                    {group.options
+                      .sort((a, b) => a.order - b.order)
+                      .map((opt) => {
+                        const isSelected = selectedOption?.id === opt.id;
+                        const hasChoiceImage = !!opt.choiceImage;
 
-            <div className={styles.customizerBuilder}>
-              {product.configurators.map((group) => {
-                const selectedOption = selections[group.id];
-
-                return (
-                  <div key={group.id} className={styles.groupContainer}>
-                    <h3 className={styles.groupTitle}>
-                      {group.title}:{' '}
-                      <span className={styles.activeSelectionText}>
-                        {selectedOption ? selectedOption.name : ''}
-                      </span>
-                    </h3>
-                    <div className={styles.optionsGrid}>
-                      {group.options
-                        .sort((a, b) => a.order - b.order)
-                        .map((opt) => {
-                          const isSelected = selectedOption?.id === opt.id;
-                          const hasChoiceImage = !!opt.choiceImage;
-
-                          if (hasChoiceImage) {
-                            return (
-                              <button
-                                key={opt.id}
-                                className={`${styles.swatchButton} ${
-                                  isSelected ? styles.swatchActive : ''
-                                }`}
-                                onClick={() => handleSelectOption(group.id, opt)}
-                                title={`${opt.name} (${
-                                  opt.priceAdjustment >= 0 ? '+' : ''
-                                }${formatPrice(opt.priceAdjustment)})`}
-                              >
-                                <img
-                                  src={getWixMediaUrl(opt.choiceImage)}
-                                  alt={opt.name}
-                                  className={styles.swatchImage}
-                                />
-                                {isSelected && <span className={styles.swatchCheck}>✓</span>}
-                              </button>
-                            );
-                          }
-
+                        if (hasChoiceImage) {
                           return (
                             <button
                               key={opt.id}
-                              className={`${styles.textButton} ${
-                                isSelected ? styles.textActive : ''
-                              }`}
+                              className={`${styles.swatchButton} ${isSelected ? styles.swatchActive : ''
+                                }`}
                               onClick={() => handleSelectOption(group.id, opt)}
+                              title={`${opt.name} (${opt.priceAdjustment >= 0 ? '+' : ''
+                                }${formatPrice(opt.priceAdjustment)})`}
                             >
-                              <span className={styles.textButtonName}>{opt.name}</span>
-                              {opt.priceAdjustment !== 0 && (
-                                <span className={styles.textButtonAdjustment}>
-                                  {opt.priceAdjustment > 0 ? '+' : ''}
-                                  {formatPrice(opt.priceAdjustment)}
-                                </span>
-                              )}
+                              <img
+                                src={getWixMediaUrl(opt.choiceImage)}
+                                alt={opt.name}
+                                className={styles.swatchImage}
+                              />
+                              {isSelected && <span className={styles.swatchCheck}>✓</span>}
                             </button>
                           );
-                        })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                        }
 
-            <div className={styles.footerSection}>
-              <button
-                className={styles.actionButton}
-                onClick={handleAddToCart}
-                disabled={isAdding || isAdded}
-              >
-                {isAdding ? 'Adding to Cart...' : isAdded ? 'Added to Cart! ✓' : 'Add to Cart'}
-              </button>
-            </div>
+                        return (
+                          <button
+                            key={opt.id}
+                            className={`${styles.textButton} ${isSelected ? styles.textActive : ''
+                              }`}
+                            onClick={() => handleSelectOption(group.id, opt)}
+                          >
+                            <span className={styles.textButtonName}>{opt.name}</span>
+                            {opt.priceAdjustment !== 0 && (
+                              <span className={styles.textButtonAdjustment}>
+                                {opt.priceAdjustment > 0 ? '+' : ''}
+                                {formatPrice(opt.priceAdjustment)}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className={styles.footerSection}>
+            <button
+              className={styles.actionButton}
+              onClick={handleAddToCart}
+              disabled={isAdding || isAdded}
+            >
+              {isAdding ? 'Adding to Cart...' : isAdded ? 'Added to Cart! ✓' : 'Add to Cart'}
+            </button>
           </div>
         </div>
+      </div>
     </div>
   );
 };
