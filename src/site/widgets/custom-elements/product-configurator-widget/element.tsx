@@ -48,9 +48,6 @@ const ProductConfigurator: FC<Props> = () => {
   // Selections state: group ID -> selected Option
   const [selections, setSelections] = useState<Record<string, Option>>({});
 
-  // Keeps track of the selection order of group IDs for layered layout compositing
-  const [selectionOrder, setSelectionOrder] = useState<string[]>([]);
-
   // Custom display image override (from selected options)
   const [previewImageOverride, setPreviewImageOverride] = useState<string>('');
 
@@ -137,7 +134,6 @@ const ProductConfigurator: FC<Props> = () => {
             
             // Default to all options unselected initially, showing base image
             setSelections({});
-            setSelectionOrder([]);
             setPreviewImageOverride('');
           } else {
             setProduct(null);
@@ -180,7 +176,6 @@ const ProductConfigurator: FC<Props> = () => {
         
         // Default to all options unselected initially, showing base image
         setSelections({});
-        setSelectionOrder([]);
         setPreviewImageOverride('');
         setLoading(false);
       })
@@ -192,7 +187,7 @@ const ProductConfigurator: FC<Props> = () => {
       });
   }, []);
 
-  // 2. Handle selection of an option inside a group (with unselect toggle and layering support)
+  // 2. Handle selection of an option inside a group (with unselect toggle support)
   const handleSelectOption = (groupId: string, option: Option) => {
     const isAlreadySelected = selections[groupId]?.id === option.id;
 
@@ -203,18 +198,12 @@ const ProductConfigurator: FC<Props> = () => {
         delete next[groupId];
         return next;
       });
-      setSelectionOrder((prev) => prev.filter((id) => id !== groupId));
     } else {
       // Select option
       setSelections((prev) => ({
         ...prev,
         [groupId]: option,
       }));
-      setSelectionOrder((prev) => {
-        // Move to the end of the stack so it renders on top
-        const filtered = prev.filter((id) => id !== groupId);
-        return [...filtered, groupId];
-      });
     }
   };
 
@@ -362,16 +351,17 @@ const ProductConfigurator: FC<Props> = () => {
                 <div className={styles.noImagePlaceholder}>No Image Available</div>
               )}
 
-              {/* 2. Layered Option Images (stacked in order of selection/clicks) */}
-              {selectionOrder.map((groupId) => {
-                const selectedOption = selections[groupId];
+              {/* 2. Layered Option Images (stacked in order of product.configurators groups) */}
+              {product.configurators.map((group, index) => {
+                const selectedOption = selections[group.id];
                 if (selectedOption && selectedOption.displayImage) {
                   return (
                     <img
-                      key={groupId}
+                      key={group.id}
                       src={getWixMediaUrl(selectedOption.displayImage)}
                       alt={`${product.productName} - ${selectedOption.name}`}
                       className={styles.overlayImage}
+                      style={{ zIndex: index + 1 }}
                     />
                   );
                 }
