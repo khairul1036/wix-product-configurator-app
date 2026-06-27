@@ -95,3 +95,47 @@ export const createCustomOrder = webMethod(
     }
   }
 );
+
+// Wix native checkout imports
+import { checkout } from '@wix/ecom';
+
+const elevatedCreateCheckout = auth.elevate(checkout.createCheckout);
+const elevatedGetCheckoutUrl = auth.elevate(checkout.getCheckoutUrl);
+
+export const createWixCheckout = webMethod(
+  Permissions.Anyone,
+  async (cartItems: any[]): Promise<{ redirectUrl: string }> => {
+    try {
+      const lineItems = cartItems.map((item) => {
+        // Price must be string according to Velo customLineItems schema
+        const priceStr = String(item.price);
+        
+        return {
+          productName: { original: `${item.productName} (${item.selectionsText})` },
+          quantity: item.quantity,
+          price: priceStr,
+          itemType: { preset: 'PHYSICAL' }
+        };
+      });
+
+      const options = {
+        channelType: 'WEB',
+        customLineItems: lineItems
+      };
+
+      const checkoutResult = await elevatedCreateCheckout(options as any);
+      const checkoutId = checkoutResult._id;
+      
+      if (!checkoutId) {
+        throw new Error('Checkout session was created but returned no ID.');
+      }
+      
+      const urlResponse = await elevatedGetCheckoutUrl(checkoutId);
+      return { redirectUrl: urlResponse.checkoutUrl || '' };
+    } catch (error: any) {
+      console.error('Error creating Wix checkout backend:', error);
+      throw new Error(`Failed to initialize checkout: ${error.message || error}`);
+    }
+  }
+);
+

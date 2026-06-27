@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import reactToWebComponent from 'react-to-webcomponent';
 import styles from './element.module.css';
 
-import { createCustomOrder } from 'backend/cart.web';
+import { createWixCheckout } from 'backend/cart.web';
 import { Option } from '../../../../backend/types';
 
 interface CartItem {
@@ -20,14 +20,8 @@ interface CartItem {
 
 const CustomCartPage: FC = () => {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [step, setStep] = useState<'cart' | 'checkout' | 'success'>('cart');
-  const [checkoutForm, setCheckoutForm] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    address: '',
-  });
-  const [submittingOrder, setSubmittingOrder] = useState<boolean>(false);
+  const [step, setStep] = useState<'cart' | 'success'>('cart');
+  const [checkoutLoading, setCheckoutLoading] = useState<boolean>(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [successOrderDetails, setSuccessOrderDetails] = useState<{
     orderNumber: string;
@@ -35,7 +29,7 @@ const CustomCartPage: FC = () => {
     totalAmount: number;
   } | null>(null);
 
-  // Load cart from localStorage on mount
+  // Load cart from localStorage on mount & check for Wix checkout success page indicators
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -43,8 +37,25 @@ const CustomCartPage: FC = () => {
         if (stored) {
           setCartItems(JSON.parse(stored));
         }
+
+        // Detect if landing on thank you page after checkout completion
+        const topLoc = (window.top || window).location;
+        const searchParams = new URLSearchParams(topLoc.search);
+        const orderId = searchParams.get('orderId') || searchParams.get('checkoutId');
+        
+        if (topLoc.pathname.includes('/thank-you') || topLoc.pathname.includes('/order-received') || orderId) {
+          setStep('success');
+          // If we have an order ID from Wix checkout, display it in success screen
+          if (orderId) {
+            setSuccessOrderDetails({
+              orderNumber: orderId.substring(0, 10).toUpperCase(),
+              customerName: searchParams.get('name') || 'Valued Customer',
+              totalAmount: 0 // Wix checkout handles final total display, we show order number
+            });
+          }
+        }
       } catch (e) {
-        console.error('Failed to load cart from localStorage:', e);
+        console.error('Failed to parse checkout parameters or load cart:', e);
       }
     }
   }, []);
@@ -104,39 +115,33 @@ const CustomCartPage: FC = () => {
     });
   };
 
-  // Submit custom checkout form and save order in backend database CMS
-  const handlePlaceOrder = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Create Wix checkout session and redirect visitor to native Wix Checkout
+  const handleProceedToCheckout = async () => {
     if (cartItems.length === 0) return;
 
-    setSubmittingOrder(true);
+    setCheckoutLoading(true);
     setCheckoutError(null);
 
     try {
-      // 1. Call backend web method to insert the order details to the CMS
-      const result = await createCustomOrder(checkoutForm, cartItems, cartSubtotal);
+      const result = await createWixCheckout(cartItems);
 
-      if (result.success) {
-        // 2. Set success details
-        setSuccessOrderDetails({
-          orderNumber: result.orderNumber,
-          customerName: checkoutForm.name,
-          totalAmount: cartSubtotal,
-        });
-
-        // 3. Reset local checkout states & clear cart
-        setCartItems([]);
+      if (result && result.redirectUrl) {
+        // Clear local cart before redirecting so they return to an empty cart
         localStorage.removeItem('custom_configurator_cart');
         notifyCartUpdated();
-        setStep('success');
+
+        // Redirect top window to Wix native checkout url
+        if (typeof window !== 'undefined') {
+          (window.top as Window).location.href = result.redirectUrl;
+        }
       } else {
-        throw new Error('Failed to save your order. Please try again.');
+        throw new Error('Could not retrieve checkout redirect URL.');
       }
     } catch (err: any) {
-      console.error('Checkout error:', err);
-      setCheckoutError(err.message || 'An error occurred while processing your order.');
+      console.error('Wix checkout creation error:', err);
+      setCheckoutError(err.message || 'An error occurred while creating your checkout session.');
     } finally {
-      setSubmittingOrder(false);
+      setCheckoutLoading(false);
     }
   };
 
@@ -225,8 +230,15 @@ const CustomCartPage: FC = () => {
                 <span>Total:</span>
                 <span className={styles.totalVal}>{formatPrice(cartSubtotal)}</span>
               </div>
-              <button className={styles.checkoutBtn} onClick={() => setStep('checkout')}>
-                Proceed to Checkout
+
+              {checkoutError && <div className={styles.checkoutErrorBox} style={{ marginBottom: '16px' }}>{checkoutError}</div>}
+
+              <button
+                className={styles.checkoutBtn}
+                onClick={handleProceedToCheckout}
+                disabled={checkoutLoading}
+              >
+                {checkoutLoading ? 'Redirecting to Checkout...' : 'Proceed to Checkout'}
               </button>
             </div>
           )}
@@ -235,130 +247,7 @@ const CustomCartPage: FC = () => {
     );
   }
 
-  // Step 2: Render Checkout
-  if (step === 'checkout') {
-    return (
-      <div className={styles.root}>
-        <div className={styles.checkoutContainer}>
-          <div className={styles.checkoutMain}>
-            <div className={styles.backRow}>
-              <button className={styles.backBtn} onClick={() => setStep('cart')}>
-                ← Back to Cart
-              </button>
-            </div>
-            <h1 className={styles.pageTitle}>Shipping & Payment</h1>
-            
-            <form className={styles.checkoutForm} onSubmit={handlePlaceOrder}>
-              <h3 className={styles.formSectionTitle}>Shipping Address</h3>
-              
-              <div className={styles.formGroup}>
-                <label className={styles.formLabel}>Full Name</label>
-                <input
-                  type="text"
-                  className={styles.formInput}
-                  required
-                  value={checkoutForm.name}
-                  onChange={(e) => setCheckoutForm({ ...checkoutForm, name: e.target.value })}
-                />
-              </div>
-
-              <div className={styles.formRow}>
-                <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Email Address</label>
-                  <input
-                    type="email"
-                    className={styles.formInput}
-                    required
-                    value={checkoutForm.email}
-                    onChange={(e) => setCheckoutForm({ ...checkoutForm, email: e.target.value })}
-                  />
-                </div>
-                <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Phone Number</label>
-                  <input
-                    type="tel"
-                    className={styles.formInput}
-                    required
-                    value={checkoutForm.phone}
-                    onChange={(e) => setCheckoutForm({ ...checkoutForm, phone: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className={styles.formGroup}>
-                <label className={styles.formLabel}>Full Shipping Address</label>
-                <textarea
-                  className={styles.formTextarea}
-                  rows={3}
-                  required
-                  value={checkoutForm.address}
-                  onChange={(e) => setCheckoutForm({ ...checkoutForm, address: e.target.value })}
-                />
-              </div>
-
-              <h3 className={styles.formSectionTitle}>Payment Details (Demo Mock)</h3>
-              <div className={styles.mockCardBox}>
-                <span className={styles.mockCardIcon}>💳</span>
-                <span className={styles.mockCardText}>Mock Credit Card (Auto-Approved on confirmation)</span>
-              </div>
-
-              {checkoutError && <div className={styles.checkoutErrorBox}>{checkoutError}</div>}
-              
-              <button type="submit" className={styles.placeOrderBtn} disabled={submittingOrder}>
-                {submittingOrder ? 'Placing Order...' : `Pay & Confirm Order (${formatPrice(cartSubtotal)})`}
-              </button>
-            </form>
-          </div>
-
-          <div className={styles.checkoutSidebar}>
-            <h2 className={styles.sidebarTitle}>Summary</h2>
-            <div className={styles.summaryCartItems}>
-              {cartItems.map((item) => (
-                <div key={item.id} className={styles.summaryCartItemRow}>
-                  <div className={styles.summaryItemThumbWrapper}>
-                    {/* Base Image */}
-                    {item.baseImage ? (
-                      <img src={item.baseImage} alt={item.productName} className={styles.summaryItemBaseThumb} />
-                    ) : (
-                      <div className={styles.noImageThumb}>🛍️</div>
-                    )}
-                    {/* Stacked Configurator Overlays */}
-                    {item.overlayImages && item.overlayImages.map((overlayUrl, idx) => (
-                      <img
-                        key={idx}
-                        src={overlayUrl}
-                        alt=""
-                        className={styles.summaryItemOverlayThumb}
-                        style={{ zIndex: idx + 1 }}
-                      />
-                    ))}
-                  </div>
-                  <div className={styles.summaryItemDetails}>
-                    <h5 className={styles.summaryItemName}>{item.productName} x{item.quantity}</h5>
-                    <span className={styles.summaryItemPrice}>{formatPrice(item.price * item.quantity)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className={styles.summaryRow}>
-              <span>Subtotal:</span>
-              <span>{formatPrice(cartSubtotal)}</span>
-            </div>
-            <div className={styles.summaryRow}>
-              <span>Shipping:</span>
-              <span className={styles.freeBadge}>FREE</span>
-            </div>
-            <div className={styles.summaryTotalRow}>
-              <span>Total Amount:</span>
-              <span className={styles.totalVal}>{formatPrice(cartSubtotal)}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Step 3: Render Success (Thank You Page)
+  // Step 2: Render Success (Thank You Page)
   return (
     <div className={styles.root}>
       <div className={styles.successCard}>
@@ -367,27 +256,23 @@ const CustomCartPage: FC = () => {
         {successOrderDetails ? (
           <>
             <p className={styles.successDesc}>
-              Thank you <strong>{successOrderDetails.customerName}</strong>! Your customized order has been received and is being prepared.
+              Thank you! Your customized order has been received and is being processed.
             </p>
             
             <div className={styles.successSummaryBox}>
               <h4 className={styles.summaryTitle}>Your Order Info:</h4>
               <div className={styles.summaryDetailsList}>
                 <div className={styles.summaryDetailItem}>
-                  <span className={styles.detailLabel}>Order Number:</span>
+                  <span className={styles.detailLabel}>Reference ID / Number:</span>
                   <span className={styles.detailValue}>{successOrderDetails.orderNumber}</span>
-                </div>
-                <div className={styles.summaryDetailItem}>
-                  <span className={styles.detailLabel}>Total Amount:</span>
-                  <span className={styles.detailValueHighlight}>{formatPrice(successOrderDetails.totalAmount)}</span>
                 </div>
                 <div className={styles.summaryDetailItem}>
                   <span className={styles.detailLabel}>Estimated Delivery:</span>
                   <span className={styles.detailValue}>5-7 Business Days</span>
                 </div>
                 <div className={styles.summaryDetailItem}>
-                  <span className={styles.detailLabel}>Order Status:</span>
-                  <span className={styles.statusBadge}>Processing</span>
+                  <span className={styles.detailLabel}>Payment Status:</span>
+                  <span className={styles.statusBadge}>Paid</span>
                 </div>
               </div>
             </div>

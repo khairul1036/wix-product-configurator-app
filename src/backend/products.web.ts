@@ -106,6 +106,10 @@ function mapFromProduct(product: Partial<Product>): any {
     delete result.id;
   }
 
+  if (product.productName !== undefined) {
+    result.title = product.productName;
+  }
+
   // Remove computed timestamps – Wix manages these automatically
   delete result.createdAt;
   delete result.updatedAt;
