@@ -6,6 +6,18 @@ import styles from './element.module.css';
 import { getProductById, getProducts } from 'backend/products.web';
 import { Product, Option } from '../../../../backend/types';
 
+interface CartItem {
+  id: string;
+  productId: string;
+  productName: string;
+  baseImage: string;
+  overlayImages: string[];
+  price: number;
+  quantity: number;
+  selectionsText: string;
+  selections: Record<string, Option>;
+}
+
 // Helper to convert wix:image://v1/ or wix:image:// URL to static HTTPS URL
 function getWixMediaUrl(wixUrl: any): string {
   if (!wixUrl) return '';
@@ -51,8 +63,9 @@ const ProductConfigurator: FC<Props> = () => {
   // Custom display image override (from selected options)
   const [previewImageOverride, setPreviewImageOverride] = useState<string>('');
 
-  // Order modal or success animation state
-  const [orderComplete, setOrderComplete] = useState<boolean>(false);
+  // Custom Cart state
+  const [isAdding, setIsAdding] = useState<boolean>(false);
+  const [isAdded, setIsAdded] = useState<boolean>(false);
 
   // 1. Fetch product data from URL query string ?id= on mount
   useEffect(() => {
@@ -161,7 +174,6 @@ const ProductConfigurator: FC<Props> = () => {
 
     setLoading(true);
     setError(null);
-    setOrderComplete(false);
 
     getProductById(slug)
       .then((data) => {
@@ -205,6 +217,92 @@ const ProductConfigurator: FC<Props> = () => {
         [groupId]: option,
       }));
     }
+  };
+
+  // Notify cart changes to header counter
+  const notifyCartUpdated = () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('custom-cart-updated'));
+    }
+  };
+
+  // Add customized configuration to custom local cart in localStorage
+  const handleAddToCart = () => {
+    if (!product) return;
+
+    setIsAdding(true);
+
+    // 1. Build selection descriptive text (choices summary)
+    const activeConfigurations = product.configurators
+      .map((group) => {
+        const selected = selections[group.id];
+        return `${group.title}: ${selected ? selected.name : 'None'}`;
+      });
+    const selectionsText = activeConfigurations.join(', ');
+
+    // 2. Generate selection signature/hash to uniquely identify this exact setup
+    const selectionHash = Object.keys(selections)
+      .sort()
+      .map((groupId) => `${groupId}:${selections[groupId]?.id || 'none'}`)
+      .join('|');
+    const cartItemId = `${product.id}-${selectionHash}`;
+
+    // 3. Resolve base image and all selected overlay images in configurator group order
+    const baseImage = getWixMediaUrl(product.image);
+    const overlayImages: string[] = [];
+    product.configurators.forEach((group) => {
+      const selected = selections[group.id];
+      if (selected && selected.displayImage) {
+        overlayImages.push(getWixMediaUrl(selected.displayImage));
+      }
+    });
+
+    // 4. Create or update cart list in localStorage
+    try {
+      const stored = localStorage.getItem('custom_configurator_cart');
+      let currentCartList: CartItem[] = stored ? JSON.parse(stored) : [];
+      
+      const existingIndex = currentCartList.findIndex((item) => item.id === cartItemId);
+
+      if (existingIndex > -1) {
+        // Increment quantity of existing customized configuration
+        currentCartList[existingIndex] = {
+          ...currentCartList[existingIndex],
+          quantity: currentCartList[existingIndex].quantity + 1,
+        };
+      } else {
+        // Add new customized configuration
+        const newCartItem: CartItem = {
+          id: cartItemId,
+          productId: product.id,
+          productName: product.productName,
+          baseImage,
+          overlayImages,
+          price: currentPrice,
+          quantity: 1,
+          selectionsText,
+          selections: { ...selections },
+        };
+        currentCartList.push(newCartItem);
+      }
+
+      localStorage.setItem('custom_configurator_cart', JSON.stringify(currentCartList));
+    } catch (e) {
+      console.error('Failed to save cart to localStorage:', e);
+    }
+
+    // 5. Notify cart changes to header counter
+    notifyCartUpdated();
+
+    // 6. Visual status feedback in button
+    setTimeout(() => {
+      setIsAdding(false);
+      setIsAdded(true);
+      
+      setTimeout(() => {
+        setIsAdded(false);
+      }, 1500);
+    }, 600);
   };
 
   // 3. Format pricing
@@ -294,49 +392,7 @@ const ProductConfigurator: FC<Props> = () => {
 
   return (
     <div className={styles.root}>
-      {orderComplete ? (
-        <div className={styles.successCard}>
-          <div className={styles.successIcon}>✓</div>
-          <h2 className={styles.successTitle}>Configuration Confirmed!</h2>
-          <p className={styles.successDesc}>
-            Your customization for <strong>{product.productName}</strong> has been saved.
-          </p>
-          <div className={styles.successSummaryBox}>
-            <h4 className={styles.summaryTitle}>Your Choices:</h4>
-            <ul className={styles.summaryList}>
-              {product.configurators.map((group) => {
-                const selected = selections[group.id];
-                return (
-                  <li key={group.id} className={styles.summaryListItem}>
-                    <span className={styles.summaryLabel}>{group.title}:</span>
-                    <span className={styles.summaryValue}>
-                      {selected ? selected.name : 'None'}
-                      {selected && selected.priceAdjustment !== 0 && (
-                        <span className={styles.summaryAdjustment}>
-                          {' '}
-                          ({selected.priceAdjustment > 0 ? '+' : ''}
-                          {formatPrice(selected.priceAdjustment)})
-                        </span>
-                      )}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-            <div className={styles.summaryTotalRow}>
-              <span>Total Price:</span>
-              <span className={styles.summaryTotalPrice}>{formatPrice(currentPrice)}</span>
-            </div>
-          </div>
-          <button
-            className={styles.resetButton}
-            onClick={() => setOrderComplete(false)}
-          >
-            Customize Again
-          </button>
-        </div>
-      ) : (
-        <div className={styles.container}>
+      <div className={styles.container}>
           {/* Left Column: Image Preview */}
           <div className={styles.previewColumn}>
             <div className={styles.imageWrapper}>
@@ -460,14 +516,14 @@ const ProductConfigurator: FC<Props> = () => {
             <div className={styles.footerSection}>
               <button
                 className={styles.actionButton}
-                onClick={() => setOrderComplete(true)}
+                onClick={handleAddToCart}
+                disabled={isAdding || isAdded}
               >
-                Confirm Configuration
+                {isAdding ? 'Adding to Cart...' : isAdded ? 'Added to Cart! ✓' : 'Add to Cart'}
               </button>
             </div>
           </div>
         </div>
-      )}
     </div>
   );
 };

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://dev.wix.com/wix-cli/schemas/custom-element.json",
+  "id": "2a5c2d3a-b8cb-4e9b-9c76-58ef231122a1",
+  "name": "Custom Cart Page Widget",
+  "width": {
+    "defaultWidth": 1000,
+    "allowStretch": true
+  },
+  "height": {
+    "defaultHeight": 700
+  },
+  "installation": {
+    "autoAddToSite": true
+  },
+  "presets": [
+    {
+      "id": "d70f80bc-de8a-4933-be84-b0eb8a67e2a1",
+      "thumbnailUrl": "../../../../dashboard/pages/wix_logo.svg"
+    }
+  ]
+}

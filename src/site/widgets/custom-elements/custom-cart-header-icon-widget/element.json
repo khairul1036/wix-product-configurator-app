@@ -1,0 +1,21 @@
+{
+  "$schema": "https://dev.wix.com/wix-cli/schemas/custom-element.json",
+  "id": "9f6b307c-de8a-4933-be84-b0eb8a67ef87",
+  "name": "Custom Cart Header Icon",
+  "width": {
+    "defaultWidth": 150,
+    "allowStretch": false
+  },
+  "height": {
+    "defaultHeight": 50
+  },
+  "installation": {
+    "autoAddToSite": true
+  },
+  "presets": [
+    {
+      "id": "e9b23fde-de8a-4933-be84-b0eb8a67ef87",
+      "thumbnailUrl": "../../../../dashboard/pages/wix_logo.svg"
+    }
+  ]
+}
