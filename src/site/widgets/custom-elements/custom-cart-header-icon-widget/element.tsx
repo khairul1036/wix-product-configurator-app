@@ -6,7 +6,7 @@ import styles from './element.module.css';
 interface CartItem {
   quantity: number;
 }
-
+// custom
 const CustomCartHeaderIcon: FC = () => {
   const [itemCount, setItemCount] = useState<number>(0);
 
